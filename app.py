@@ -1,53 +1,70 @@
-import tkinter as tk
-from tkinter import scrolledtext
+import streamlit as st
 import requests
 import time
-import threading
 import subprocess
 import re
 
-def ispisi(tekst):
-    rezultati_box.insert(tk.END, tekst + "\n")
-    rezultati_box.see(tk.END)
+st.set_page_config(page_title="OSINT Alat v2.0", page_icon="🕵️", layout="centered")
 
-def ocisti_ekran():
-    rezultati_box.delete(1.0, tk.END)
+st.markdown("""
+    <style>
+    .stApp {
+        background-color: #121212;
+        color: #00ff41;
+    }
+    h1 {
+        color: #00ff41 !important;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+    }
+    .subtitle {
+        text-align: center;
+        color: #aaaaaa;
+        margin-bottom: 20px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-def pokreni_ip():
-    ip_adresa = unos_polje.get().strip()
+st.markdown("<h1>OSINT</h1>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>Alat za provjeru javnih IP adresa, korisničkih profila i e-maila</p>", unsafe_allow_html=True)
+
+unos = st.text_input("Upiši IP adresu, korisničko ime ili e-mail:", placeholder="npr. 8.8.8.8 ili nekimejl@gmail.com")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    btn_ip = st.button("🌐 Provjeri IP", use_container_width=True)
+with col2:
+    btn_user = st.button("👤 Korisnik", use_container_width=True)
+with col3:
+    btn_mail = st.button("📧 Provjeri Mail", use_container_width=True)
+
+if btn_ip:
+    ip_adresa = unos.strip()
     if not ip_adresa:
-        ispisi("[!] Upiši IP adresu ili domenu u polje iznad!")
-        return
-    
-    ocisti_ekran()
-    ispisi(f"Pretražujem IP / domenu: {ip_adresa}...\n")
-    
-    def zadatak():
-        try:
-            odgovor = requests.get("http://ip-api.com" + ip_adresa, timeout=5).json()
-            if odgovor.get("status") == "success":
-                ispisi("--- REZULTATI ZA IP ---")
-                ispisi(f"Država: {odgovor.get('country')}")
-                ispisi(f"Grad: {odgovor.get('city')}")
-                ispisi(f"Operater: {odgovor.get('isp')}")
-                ispisi(f"Vremenska zona: {odgovor.get('timezone')}")
-            else:
-                ispisi("[!] Neispravna ili privatna IP adresa.")
-        except:
-            ispisi("[!] Greška pri spajanju na IP servis.")
+        st.warning("[!] Upiši IP adresu ili domenu u polje iznad!")
+    else:
+        with st.spinner(f"Pretražujem IP / domenu: {ip_adresa}..."):
+            try:
+                odgovor = requests.get(f"http://ip-api.com{ip_adresa}", timeout=5).json()
+                if odgovor.get("status") == "success":
+                    rezultat = (
+                        f"--- REZULTATI ZA IP ---\n"
+                        f"Država: {odgovor.get('country')}\n"
+                        f"Grad: {odgovor.get('city')}\n"
+                        f"Operater: {odgovor.get('isp')}\n"
+                        f"Vremenska zona: {odgovor.get('timezone')}"
+                    )
+                    st.code(rezultat, language="text")
+                else:
+                    st.error("[!] Neispravna ili privatna IP adresa.")
+            except Exception:
+                st.error("[!] Greška pri spajanju na IP servis.")
 
-    threading.Thread(target=zadatak, daemon=True).start()
-
-def pokreni_korisnika():
-    korisnik = unos_polje.get().strip()
+if btn_user:
+    korisnik = unos.strip()
     if not korisnik:
-        ispisi("[!] Upiši korisničko ime u polje iznad!")
-        return
-
-    ocisti_ekran()
-    ispisi(f"Pretražujem javne profile za: {korisnik}...\n")
-
-    def zadatak():
+        st.warning("[!] Upiši korisničko ime u polje iznad!")
+    else:
         stranice = {
             "GitHub": "https://github.com",
             "GitLab": "https://gitlab.com",
@@ -72,102 +89,54 @@ def pokreni_korisnika():
             "Linktree": "https://linktr.ee",
             "Patreon": "https://patreon.com"
         }
-
         zaglavlje = {"User-Agent": "Mozilla/5.0"}
+        ispis_linije = [f"Pretražujem javne profile za: {korisnik}...\n"]
+        
+        okvir_rezultata = st.empty()
+        okvir_rezultata.code("\n".join(ispis_linije), language="text")
 
         for naziv, bazni_url in stranice.items():
             puni_url = bazni_url + korisnik
             try:
                 odgovor = requests.get(puni_url, headers=zaglavlje, timeout=5)
                 if odgovor.status_code == 200:
-                    ispisi(f"[+] PRONAĐENO ({naziv}): {puni_url}")
+                    ispis_linije.append(f"[+] PRONAĐENO ({naziv}): {puni_url}")
                 else:
-                    ispisi(f"[-] Nema na {naziv}")
-            except:
-                ispisi(f"[!] Greška ({naziv})")
+                    ispis_linije.append(f"[-] Nema na {naziv}")
+            except Exception:
+                ispis_linije.append(f"[!] Greška ({naziv})")
             
-            time.sleep(0.4)
-        
-        ispisi("\n--- Pretraga završena ---")
+            okvir_rezultata.code("\n".join(ispis_linije), language="text")
+            time.sleep(0.3)
 
-    threading.Thread(target=zadatak, daemon=True).start()
+        ispis_linije.append("\n--- Pretraga završena ---")
+        okvir_rezultata.code("\n".join(ispis_linije), language="text")
 
-def pokreni_mail():
-    email = unos_polje.get().strip()
+if btn_mail:
+    email = unos.strip()
     if not email or "@" not in email:
-        ispisi("[!] Upiši ispravnu e-mail adresu u polje iznad!")
-        return
+        st.warning("[!] Upiši ispravnu e-mail adresu u polje iznad!")
+    else:
+        with st.spinner(f"Pretražujem servise za e-mail: {email} (pričekaj 10-15 sekundi)..."):
+            try:
+                proces = subprocess.run(
+                    ["holehe", email, "--only-used"],
+                    capture_output=True,
+                    text=True
+                )
+                ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+                cisti_izlaz = ansi_escape.sub('', proces.stdout)
 
-    ocisti_ekran()
-    ispisi(f"Pretražujem servise za e-mail: {email} (pričekaj 10-ak sekundi)...\n")
+                pronadeni = []
+                for linija in cisti_izlaz.splitlines():
+                    linija_trim = linija.strip()
+                    if linija_trim.startswith("[+]"):
+                        pronadeni.append(linija_trim)
 
-    def zadatak():
-        try:
-            # Pokreće holehe u pozadini bez otvaranja crnog CMD prozora
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-
-            proces = subprocess.run(
-                ["holehe", email, "--only-used"],
-                capture_output=True,
-                text=True,
-                startupinfo=startupinfo
-            )
-
-            # Uklanja ANSI kodove za boje iz terminala
-            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-            cisti_izlaz = ansi_escape.sub('', proces.stdout)
-
-            pronadeno = False
-            for linija in cisti_izlaz.splitlines():
-                linija_trim = linija.strip()
-                # Prikazuje isključivo redove koji počinju s [+]
-                if linija_trim.startswith("[+]"):
-                    ispisi(linija_trim)
-                    pronadeno = True
-
-            if not pronadeno:
-                ispisi("[-] Nije pronađen nijedan javno povezan račun.")
-
-            ispisi("\n--- Provjera e-maila završena ---")
-
-        except FileNotFoundError:
-            ispisi("[!] Greška: Alat 'holehe' nije pronađen. Provjeri je li instaliran (pip install holehe).")
-        except Exception as e:
-            ispisi(f"[!] Došlo je do greške: {e}")
-
-    threading.Thread(target=zadatak, daemon=True).start()
-
-prozor = tk.Tk()
-prozor.title("OSINT Alat v2.0")
-prozor.geometry("680x520")
-prozor.configure(bg="#121212")
-
-naslov = tk.Label(prozor, text="OSINT", font=("Consolas", 32, "bold"), fg="#00ff41", bg="#121212")
-naslov.pack(pady=(15, 0))
-
-podnaslov = tk.Label(prozor, text="Alat za provjeru javnih IP adresa, korisničkih profila i e-maila", font=("Arial", 10), fg="#aaaaaa", bg="#121212")
-podnaslov.pack(pady=(0, 15))
-
-unos_polje = tk.Entry(prozor, font=("Consolas", 13), width=38, bg="#1e1e1e", fg="#ffffff", insertbackground="white", justify="center")
-unos_polje.pack(pady=5, ipady=5)
-
-okvir_gumbi = tk.Frame(prozor, bg="#121212")
-okvir_gumbi.pack(pady=15)
-
-gumb_ip = tk.Button(okvir_gumbi, text="Provjeri IP / Domenu", font=("Arial", 10, "bold"), bg="#007acc", fg="white", width=17, height=2, cursor="hand2", command=pokreni_ip)
-gumb_ip.grid(row=0, column=0, padx=6)
-
-gumb_user = tk.Button(okvir_gumbi, text="Provjeri Korisnika", font=("Arial", 10, "bold"), bg="#28a745", fg="white", width=17, height=2, cursor="hand2", command=pokreni_korisnika)
-gumb_user.grid(row=0, column=1, padx=6)
-
-gumb_mail = tk.Button(okvir_gumbi, text="Provjeri Mail", font=("Arial", 10, "bold"), bg="#d97706", fg="white", width=15, height=2, cursor="hand2", command=pokreni_mail)
-gumb_mail.grid(row=0, column=2, padx=6)
-
-gumb_ocisti = tk.Button(okvir_gumbi, text="Očisti", font=("Arial", 10, "bold"), bg="#444444", fg="white", width=10, height=2, cursor="hand2", command=ocisti_ekran)
-gumb_ocisti.grid(row=0, column=3, padx=6)
-
-rezultati_box = scrolledtext.ScrolledText(prozor, font=("Consolas", 10), width=78, height=18, bg="#0d0d0d", fg="#00ff41")
-rezultati_box.pack(pady=10, padx=15)
-
-prozor.mainloop()
+                if pronadeni:
+                    rezultat = "\n".join(pronadeni) + "\n\n--- Provjera e-maila završena ---"
+                    st.code(rezultat, language="text")
+                else:
+                    st.info("[-] Nije pronađen nijedan javno povezan račun.")
+            except Exception as e:
+                st.error(f"[!] Greška pri pokretanju alata: {e}")
